@@ -1,5 +1,5 @@
-﻿"""
-AI Chatbot API â€” Week 3-4 build (free version using Groq).
+"""
+AI Chatbot API — Week 3-4 build (free version using Groq).
 
 Concepts in this file:
 - FastAPI endpoints (GET /health, POST /chat, POST /chat/stream)
@@ -24,10 +24,13 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from email_generator import router as email_router
+from llm_errors import to_http_error
+
 load_dotenv()  # reads GROQ_API_KEY etc. from a .env file
 
 # ---------- Settings ----------
-MODEL = os.getenv("MODEL", "openai/gpt-oss-20b")   # free, fast model on Groq
+MODEL = os.getenv("MODEL", "openai/gpt-oss-20b")     # free, fast model on Groq
 MAX_HISTORY = int(os.getenv("MAX_HISTORY", "20"))     # how many past messages we send
 SYSTEM_PROMPT = os.getenv(
     "SYSTEM_PROMPT",
@@ -37,7 +40,8 @@ SYSTEM_PROMPT = os.getenv(
 # One shared async client. It reads GROQ_API_KEY from the environment.
 client = groq.AsyncGroq()
 
-app = FastAPI(title="AI Chatbot API", version="1.1")
+app = FastAPI(title="AI Chatbot API", version="1.2")
+app.include_router(email_router)  # adds POST /email/generate
 
 
 # ---------- Request / response shapes (Pydantic) ----------
@@ -76,19 +80,6 @@ def prepare_history(messages: list[Message]) -> list[dict]:
 
     # In the OpenAI-style format Groq uses, the system prompt is the first message.
     return [{"role": "system", "content": SYSTEM_PROMPT}] + [m.model_dump() for m in recent]
-
-
-def to_http_error(err: Exception) -> HTTPException:
-    """Turn LLM-provider errors into clear status codes for OUR clients."""
-    if isinstance(err, groq.AuthenticationError):
-        return HTTPException(500, "Server API key is missing or invalid.")
-    if isinstance(err, groq.RateLimitError):
-        return HTTPException(429, "Free-tier rate limit reached. Wait a moment and try again.")
-    if isinstance(err, groq.APIConnectionError):
-        return HTTPException(503, "Could not reach the AI provider.")
-    if isinstance(err, groq.APIStatusError):
-        return HTTPException(502, f"AI provider error: {err.message}")
-    return HTTPException(500, "Unexpected server error.")
 
 
 # ---------- Endpoints ----------
